@@ -97,18 +97,18 @@ printf("this code is for debugging\n");
 如果仅仅希望进行语法检查，可以用 `gcc` 的 `-fsyntax-only` 选项；如果为了使代码有比较好的可移植性，避免使用 `gcc` 的一些扩展特性，可以结合 `-std` 和 `-pedantic`（或者 `-pedantic-erros` ）选项让源代码遵循某个 C 语言标准的语法。这里演示一个简单的例子：
 
 ```
-$ cat hello.c
+$ cat wrong.c
 #include <stdio.h>
 int main()
 {
 	printf("hello, world\n")
 	return 0;
 }
-$ gcc -fsyntax-only hello.c
-hello.c: In function ‘main’:
-hello.c:5: error: expected ‘;’ before ‘return’
-$ vim hello.c
-$ cat hello.c
+$ gcc -fsyntax-only wrong.c
+wrong.c: In function ‘main’:
+wrong.c:5: error: expected ‘;’ before ‘return’
+$ vim wrong.c
+$ cat wrong.c
 #include <stdio.h>
 int main()
 {
@@ -116,9 +116,9 @@ int main()
         int i;
         return 0;
 }
-$ gcc -std=c89 -pedantic-errors hello.c    #默认情况下，gcc是允许在程序中间声明变量的，但是turboc就不支持
-hello.c: In function ‘main’:
-hello.c:5: error: ISO C90 forbids mixed declarations and code
+$ gcc -pedantic-errors wrong.c    #默认情况下，gcc是允许在程序中间声明变量
+wrong.c: In function ‘main’:
+wrong.c:5: error: ISO C90 forbids mixed declarations and code [-Wpedantic]
 ```
 
 语法错误是程序开发过程中难以避免的错误（人的大脑在很多情况下都容易开小差），不过编译器往往能够通过语法检查快速发现这些错误，并准确地告知语法错误的大概位置。因此，作为开发人员，要做的事情不是“恐慌”（不知所措），而是认真阅读编译器的提示，根据平时积累的经验（最好总结一份常见语法错误索引，很多资料都提供了常见语法错误列表，如《[C Traps & Pitfalls](https://en.wikipedia.org/wiki/C_Traps_and_Pitfalls)》和编辑器提供的语法检查功能（语法加亮、括号匹配提示等）快速定位语法出错的位置并进行修改。
@@ -129,30 +129,28 @@ hello.c:5: error: ISO C90 forbids mixed declarations and code
 语法检查之后就是翻译动作，`gcc` 提供了一个优化选项 `-O`，以便根据不同的运行平台和用户要求产生经过优化的汇编代码。例如，
 
 ```
-$ gcc -o hello hello.c         # 采用默认选项，不优化
-$ gcc -O2 -o hello2 hello.c    # 优化等次是2
-$ gcc -Os -o hellos hello.c    # 优化目标代码的大小
-$ ls -S hello hello2 hellos    # 可以看到，hellos 比较小, hello2 比较大
-hello2  hello  hellos
-$ time ./hello
-hello, world
+$ cat eval.c
+int main()
+{
+    int a = 11, b = 13, c = 5566, j;
+    int i, result;
+    for (j = 0; j < 10000; j++)
+        for (i = 0; i < 10000; i++)
+            result = (a * b + i) / (a * c);
+    return result;
+}
+$ gcc -o eval eval.c         # 采用默认选项，不优化
+$ gcc -O2 -o eval2 eval.c    # 优化等次是2
+$ time ./eval
+
+real    0m0.346s
+user    0m0.341s
+sys     0m0.000s
+$ time ./eval2
 
 real    0m0.001s
 user    0m0.000s
-sys     0m0.000s
-$ time ./hello2     # 可能是代码比较少的缘故，执行效率看上去不是很明显
-hello, world
-
-real    0m0.001s
-user    0m0.000s
-sys     0m0.000s
-
-$ time ./hellos     # 虽然目标代码小了，但是执行效率慢了些
-hello, world
-
-real    0m0.002s
-user    0m0.000s
-sys     0m0.000s
+sys     0m0.001s
 ```
 
 根据上面的简单演示，可以看出 `gcc` 有很多不同的优化选项，主要看用户的需求了，目标代码的大小和效率之间貌似存在一个“纠缠”，需要开发人员自己权衡。
@@ -160,37 +158,44 @@ sys     0m0.000s
 <span id="toc_27212_14734_10"></span>
 ### 生成汇编语言文件
 
-下面通过 `-S` 选项来看看编译出来的中间结果：汇编语言，还是以之前那个 `hello.c` 为例。
+下面通过 `-S` 选项来看看编译出来的中间结果：汇编语言，以 `hello.c` 为例。
 
 ```
+$ cat hello.c
+#include <stdio.h>
+int main()
+{
+    printf("hello, world");
+    return 0;
+}
 $ gcc -S hello.c  # 默认输出是hello.s，可自己指定，输出到屏幕`-o -`，输出到其他文件`-o file`
 $ cat hello.s
-cat hello.s
         .file   "hello.c"
         .section        .rodata
 .LC0:
         .string "hello, world"
         .text
-.globl main
+        .globl  main
         .type   main, @function
 main:
-        leal    4(%esp), %ecx
-        andl    $-16, %esp
-        pushl   -4(%ecx)
-        pushl   %ebp
-        movl    %esp, %ebp
-        pushl   %ecx
-        subl    $4, %esp
-        movl    $.LC0, (%esp)
-        call    puts
+.LFB0:
+        .cfi_startproc
+        pushq   %rbp
+        .cfi_def_cfa_offset 16
+        .cfi_offset 6, -16
+        movq    %rsp, %rbp
+        .cfi_def_cfa_register 6
+        movl    $.LC0, %edi
         movl    $0, %eax
-        addl    $4, %esp
-        popl    %ecx
-        popl    %ebp
-        leal    -4(%ecx), %esp
+        call    printf
+        movl    $0, %eax
+        popq    %rbp
+        .cfi_def_cfa 7, 8
         ret
+        .cfi_endproc
+.LFE0:
         .size   main, .-main
-        .ident  "GCC: (GNU) 4.1.3 20070929 (prerelease) (Ubuntu 4.1.2-16ubuntu2)"
+        .ident  "GCC: (Ubuntu 4.8.4-2ubuntu1~14.04) 4.8.4"
         .section        .note.GNU-stack,"",@progbits
 ```
 
@@ -221,10 +226,10 @@ hello.s: ASCII assembler program text
 $ gcc -c hello.s   #用gcc把汇编语言编译成目标代码
 $ file hello.o     #file命令用来查看文件类型，目标代码可重定位的(relocatable)，
                    #需要通过ld进行进一步链接成可执行程序(executable)和共享库(shared)
-hello.o: ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
+hello.o: ELF 64-bit LSB  relocatable, x86-64, version 1 (SYSV), not stripped
 $ as -o hello.o hello.s        #用as把汇编语言编译成目标代码
 $ file hello.o
-hello.o: ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
+hello.o: ELF 64-bit LSB  relocatable, x86-64, version 1 (SYSV), not stripped
 ```
 
 `gcc` 和 `as` 默认产生的目标代码都是 ELF 格式的，因此这里主要讨论ELF格式的目标代码（如果有时间再回顾一下 `a.out` 和 `coff` 格式，当然也可以先了解一下，并结合 `objcopy` 来转换它们，比较异同)。
@@ -267,11 +272,11 @@ Section Headers Table(节区头部表，用于链接可重定位文件成可执�
 
 ```
 /* myprintf.c */
-#include <stdio.h>
 
+#include <stdio.h>
 void myprintf(void)
 {
-	printf("hello, world!\n");
+    printf("hello, world!\n");
 }
 ```
 
@@ -280,20 +285,18 @@ void myprintf(void)
 
 #ifndef _TEST_H_
 #define _TEST_H_
-
 void myprintf(void);
-
 #endif
 ```
 
 ```
 /* test.c */
-#include "test.h"
 
+#include "test.h"
 int main()
 {
-	myprintf();
-	return 0;
+    myprintf();
+    return 0;
 }
 ```
 
@@ -338,6 +341,7 @@ $ gcc -o test test.o -lmyprintf -L./
 编译产生动态链接库，并支持 `major` 和 `minor` 版本号，动态链接库类型为 `DYN`：
 
 ```
+$ gcc -fPIC -c myprintf.c
 $ gcc -Wall myprintf.o -shared -Wl,-soname,libmyprintf.so.0 -o libmyprintf.so.0.0
 $ ln -sf libmyprintf.so.0.0 libmyprintf.so.0
 $ ln -sf libmyprintf.so.0 libmyprintf.so
@@ -388,24 +392,27 @@ ELF 文件具有很大的灵活性，它通过文件头组织整个文件的总�
 ```
 $ gcc -c myprintf.c
 $ readelf -S myprintf.o
-There are 11 section headers, starting at offset 0xc0:
+There are 13 section headers, starting at offset 0x128:
 
 Section Headers:
-  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al
-  [ 0]                   NULL            00000000 000000 000000 00      0   0  0
-  [ 1] .text             PROGBITS        00000000 000034 000018 00  AX  0   0  4
-  [ 2] .rel.text         REL             00000000 000334 000010 08      9   1  4
-  [ 3] .data             PROGBITS        00000000 00004c 000000 00  WA  0   0  4
-  [ 4] .bss              NOBITS          00000000 00004c 000000 00  WA  0   0  4
-  [ 5] .rodata           PROGBITS        00000000 00004c 00000e 00   A  0   0  1
-  [ 6] .comment          PROGBITS        00000000 00005a 000012 00      0   0  1
-  [ 7] .note.GNU-stack   PROGBITS        00000000 00006c 000000 00      0   0  1
-  [ 8] .shstrtab         STRTAB          00000000 00006c 000051 00      0   0  1
-  [ 9] .symtab           SYMTAB          00000000 000278 0000a0 10     10   8  4
-  [10] .strtab           STRTAB          00000000 000318 00001a 00      0   0  1
+  [Nr] Name              Type             Address           Offset
+       Size              EntSize          Flags  Link  Info  Align
+  [ 0]                   NULL             0000000000000000  00000000
+       0000000000000000  0000000000000000           0     0     0
+  [ 1] .text             PROGBITS         0000000000000000  00000040
+       0000000000000010  0000000000000000  AX       0     0     1
+  [ 2] .rela.text        RELA             0000000000000000  00000590
+       0000000000000030  0000000000000018          11     1     8
+  [ 3] .data             PROGBITS         0000000000000000  00000050
+       0000000000000000  0000000000000000  WA       0     0     1
+  [ 4] .bss              NOBITS           0000000000000000  00000050
+       0000000000000000  0000000000000000  WA       0     0     1
+  [ 5] .rodata           PROGBITS         0000000000000000  00000050
+       000000000000000e  0000000000000000   A       0     0     1
+...
 Key to Flags:
-  W (write), A (alloc), X (execute), M (merge), S (strings)
-  I (info), L (link order), G (group), x (unknown)
+  W (write), A (alloc), X (execute), M (merge), S (strings), l (large)
+  I (info), L (link order), G (group), T (TLS), E (exclude), x (unknown)
   O (extra OS processing required) o (OS specific), p (processor specific)
 ```
 
@@ -413,20 +420,18 @@ Key to Flags:
 
 ```
 $ objdump -d -j .text   myprintf.o
-myprintf.o:     file format elf32-i386
+myprintf.o:     file format elf64-x86-64
+
 
 Disassembly of section .text:
 
-00000000 <myprintf>:
-   0:   55                      push   %ebp
-   1:   89 e5                   mov    %esp,%ebp
-   3:   83 ec 08                sub    $0x8,%esp
-   6:   83 ec 0c                sub    $0xc,%esp
-   9:   68 00 00 00 00          push   $0x0
-   e:   e8 fc ff ff ff          call   f <myprintf+0xf>
-  13:   83 c4 10                add    $0x10,%esp
-  16:   c9                      leave
-  17:   c3                      ret
+0000000000000000 <myprintf>:
+   0:	55                   	push   %rbp
+   1:	48 89 e5             	mov    %rsp,%rbp
+   4:	bf 00 00 00 00       	mov    $0x0,%edi
+   9:	e8 00 00 00 00       	callq  e <myprintf+0xe>
+   e:	5d                   	pop    %rbp
+   f:	c3                   	retq
 ```
 
 用 `-r` 选项可以看到有关重定位的信息，这里有两部分需要重定位：
@@ -434,10 +439,10 @@ Disassembly of section .text:
 ```
 $ readelf -r myprintf.o
 
-Relocation section '.rel.text' at offset 0x334 contains 2 entries:
- Offset     Info    Type            Sym.Value  Sym. Name
-0000000a  00000501 R_386_32          00000000   .rodata
-0000000f  00000902 R_386_PC32        00000000   puts
+Relocation section '.rela.text' at offset 0x590 contains 2 entries:
+  Offset          Info           Type           Sym. Value    Sym. Name + Addend
+000000000005  00050000000a R_X86_64_32       0000000000000000 .rodata + 0
+00000000000a  000a00000002 R_X86_64_PC32     0000000000000000 puts - 4
 ```
 
 `.rodata` 节区包含只读数据，即我们要打印的 `hello, world!`
@@ -460,7 +465,7 @@ Section '.data' has no data to dump.
 也没有 `.bss` 节区，它应该包含一些未初始化的数据，程序默认初始为 0：
 
 ```
-$ readelf -x .bss       myprintf.o
+$ readelf -x .bss myprintf.o
 
 Section '.bss' has no data to dump.
 ```
@@ -471,8 +476,9 @@ Section '.bss' has no data to dump.
 $ readelf -x .comment myprintf.o
 
 Hex dump of section '.comment':
-  0x00000000 00474343 3a202847 4e552920 342e312e .GCC: (GNU) 4.1.
-  0x00000010 3200                                2.
+  0x00000000 00474343 3a202855 62756e74 7520342e .GCC: (Ubuntu 4.
+  0x00000010 382e342d 32756275 6e747531 7e31342e 8.4-2ubuntu1~14.
+  0x00000020 30342920 342e382e 3400              04) 4.8.4.
 ```
 
 `.note.GNU-stack` 这个节区也没有内容：
@@ -490,30 +496,32 @@ $ readelf -x .shstrtab myprintf.o
 
 Hex dump of section '.shstrtab':
   0x00000000 002e7379 6d746162 002e7374 72746162 ..symtab..strtab
-  0x00000010 002e7368 73747274 6162002e 72656c2e ..shstrtab..rel.
-  0x00000020 74657874 002e6461 7461002e 62737300 text..data..bss.
-  0x00000030 2e726f64 61746100 2e636f6d 6d656e74 .rodata..comment
-  0x00000040 002e6e6f 74652e47 4e552d73 7461636b ..note.GNU-stack
-  0x00000050 00                                  .
+  0x00000010 002e7368 73747274 6162002e 72656c61 ..shstrtab..rela
+  0x00000020 2e746578 74002e64 61746100 2e627373 .text..data..bss
+  0x00000030 002e726f 64617461 002e636f 6d6d656e ..rodata..commen
+  0x00000040 74002e6e 6f74652e 474e552d 73746163 t..note.GNU-stac
+  0x00000050 6b002e72 656c612e 65685f66 72616d65 k..rela.eh_frame
+  0x00000060 00
 ```
 
 符号表 `.symtab` 包括所有用到的相关符号信息，如函数名、变量名，可用 `readelf` 查看：
 
 ```
-$ readelf -symtab myprintf.o
+$ readelf -s myprintf.o
 
-Symbol table '.symtab' contains 10 entries:
-   Num:    Value  Size Type    Bind   Vis      Ndx Name
-     0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND
-     1: 00000000     0 FILE    LOCAL  DEFAULT  ABS myprintf.c
-     2: 00000000     0 SECTION LOCAL  DEFAULT    1
-     3: 00000000     0 SECTION LOCAL  DEFAULT    3
-     4: 00000000     0 SECTION LOCAL  DEFAULT    4
-     5: 00000000     0 SECTION LOCAL  DEFAULT    5
-     6: 00000000     0 SECTION LOCAL  DEFAULT    7
-     7: 00000000     0 SECTION LOCAL  DEFAULT    6
-     8: 00000000    24 FUNC    GLOBAL DEFAULT    1 myprintf
-     9: 00000000     0 NOTYPE  GLOBAL DEFAULT  UND puts
+Symbol table '.symtab' contains 11 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND
+     1: 0000000000000000     0 FILE    LOCAL  DEFAULT  ABS myprintf.c
+     2: 0000000000000000     0 SECTION LOCAL  DEFAULT    1
+     3: 0000000000000000     0 SECTION LOCAL  DEFAULT    3
+     4: 0000000000000000     0 SECTION LOCAL  DEFAULT    4
+     5: 0000000000000000     0 SECTION LOCAL  DEFAULT    5
+     6: 0000000000000000     0 SECTION LOCAL  DEFAULT    7
+     7: 0000000000000000     0 SECTION LOCAL  DEFAULT    8
+     8: 0000000000000000     0 SECTION LOCAL  DEFAULT    6
+     9: 0000000000000000    16 FUNC    GLOBAL DEFAULT    1 myprintf
+    10: 0000000000000000     0 NOTYPE  GLOBAL DEFAULT  UND puts
 ```
 
 字符串表 `.strtab` 包含用到的字符串，包括文件名、函数名、变量名等：
@@ -536,26 +544,31 @@ Hex dump of section '.strtab':
 ```
 $ gcc -S myprintf.c
 $ cat myprintf.s
-        .file   "myprintf.c"
-        .section        .rodata
+	.file	"myprintf.c"
+	.section	.rodata
 .LC0:
-        .string "hello, world!"
-        .text
-.globl myprintf
-        .type   myprintf, @function
+	.string	"hello, world!"
+	.text
+	.globl	myprintf
+	.type	myprintf, @function
 myprintf:
-        pushl   %ebp
-        movl    %esp, %ebp
-        subl    $8, %esp
-        subl    $12, %esp
-        pushl   $.LC0
-        call    puts
-        addl    $16, %esp
-        leave
-        ret
-        .size   myprintf, .-myprintf
-        .ident  "GCC: (GNU) 4.1.2"
-        .section        .note.GNU-stack,"",@progbits
+.LFB0:
+	.cfi_startproc
+	pushq	%rbp
+	.cfi_def_cfa_offset 16
+	.cfi_offset 6, -16
+	movq	%rsp, %rbp
+	.cfi_def_cfa_register 6
+	movl	$.LC0, %edi
+	call	puts
+	popq	%rbp
+	.cfi_def_cfa 7, 8
+	ret
+	.cfi_endproc
+.LFE0:
+	.size	myprintf, .-myprintf
+	.ident	"GCC: (Ubuntu 4.8.4-2ubuntu1~14.04) 4.8.4"
+	.section	.note.GNU-stack,"",@progbits
 ```
 
 是不是可以从中看出可重定位文件中的那些节区和汇编语言代码之间的关系？在上面的可重定位文件，可以看到有一个可重定位的节区，即 `.rel.text`，它标记了两个需要重定位的项，`.rodata` 和 `puts`。这个节区将告诉编译器这两个信息在链接或者动态链接的过程中需要重定位， 具体如何重定位？将根据重定位项的类型，比如上面的 `R_386_32` 和 `R_386_PC32`。
@@ -585,52 +598,63 @@ myprintf:
 
 ```
 $ readelf -S test.o
-There are 10 section headers, starting at offset 0xb4:
+There are 12 section headers, starting at offset 0x118:
 
 Section Headers:
-  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al
-  [ 0]                   NULL            00000000 000000 000000 00      0   0  0
-  [ 1] .text             PROGBITS        00000000 000034 000024 00  AX  0   0  4
-  [ 2] .rel.text         REL             00000000 0002ec 000008 08      8   1  4
-  [ 3] .data             PROGBITS        00000000 000058 000000 00  WA  0   0  4
-  [ 4] .bss              NOBITS          00000000 000058 000000 00  WA  0   0  4
-  [ 5] .comment          PROGBITS        00000000 000058 000012 00      0   0  1
-  [ 6] .note.GNU-stack   PROGBITS        00000000 00006a 000000 00      0   0  1
-  [ 7] .shstrtab         STRTAB          00000000 00006a 000049 00      0   0  1
-  [ 8] .symtab           SYMTAB          00000000 000244 000090 10      9   7  4
-  [ 9] .strtab           STRTAB          00000000 0002d4 000016 00      0   0  1
-Key to Flags:
-  W (write), A (alloc), X (execute), M (merge), S (strings)
-  I (info), L (link order), G (group), x (unknown)
-  O (extra OS processing required) o (OS specific), p (processor specific)
+  [Nr] Name              Type             Address           Offset
+       Size              EntSize          Flags  Link  Info  Align
+  [ 0]                   NULL             0000000000000000  00000000
+       0000000000000000  0000000000000000           0     0     0
+  [ 1] .text             PROGBITS         0000000000000000  00000040
+       0000000000000010  0000000000000000  AX       0     0     1
+  [ 2] .rela.text        RELA             0000000000000000  00000520
+       0000000000000018  0000000000000018          10     1     8
+  [ 3] .data             PROGBITS         0000000000000000  00000050
+       0000000000000000  0000000000000000  WA       0     0     1
+  [ 4] .bss              NOBITS           0000000000000000  00000050
+       0000000000000000  0000000000000000  WA       0     0     1
+...
 $ gcc -o test test.o myprintf.o
 $ readelf -l test
 
 Elf file type is EXEC (Executable file)
-Entry point 0x80482b0
-There are 7 program headers, starting at offset 52
+Entry point 0x400440
+There are 9 program headers, starting at offset 64
 
 Program Headers:
-  Type           Offset   VirtAddr   PhysAddr   FileSiz MemSiz  Flg Align
-  PHDR           0x000034 0x08048034 0x08048034 0x000e0 0x000e0 R E 0x4
-  INTERP         0x000114 0x08048114 0x08048114 0x00013 0x00013 R   0x1
-      [Requesting program interpreter: /lib/ld-linux.so.2]
-  LOAD           0x000000 0x08048000 0x08048000 0x0047c 0x0047c R E 0x1000
-  LOAD           0x00047c 0x0804947c 0x0804947c 0x00104 0x00108 RW  0x1000
-  DYNAMIC        0x000490 0x08049490 0x08049490 0x000c8 0x000c8 RW  0x4
-  NOTE           0x000128 0x08048128 0x08048128 0x00020 0x00020 R   0x4
-  GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x00000 RW  0x4
+  Type           Offset             VirtAddr           PhysAddr
+                 FileSiz            MemSiz              Flags  Align
+  PHDR           0x0000000000000040 0x0000000000400040 0x0000000000400040
+                 0x00000000000001f8 0x00000000000001f8  R E    8
+  INTERP         0x0000000000000238 0x0000000000400238 0x0000000000400238
+                 0x000000000000001c 0x000000000000001c  R      1
+      [Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]
+  LOAD           0x0000000000000000 0x0000000000400000 0x0000000000400000
+                 0x0000000000000734 0x0000000000000734  R E    200000
+  LOAD           0x0000000000000e10 0x0000000000600e10 0x0000000000600e10
+                 0x0000000000000230 0x0000000000000238  RW     200000
+  DYNAMIC        0x0000000000000e28 0x0000000000600e28 0x0000000000600e28
+                 0x00000000000001d0 0x00000000000001d0  RW     8
+  NOTE           0x0000000000000254 0x0000000000400254 0x0000000000400254
+                 0x0000000000000044 0x0000000000000044  R      4
+  GNU_EH_FRAME   0x00000000000005e4 0x00000000004005e4 0x00000000004005e4
+                 0x000000000000003c 0x000000000000003c  R      4
+  GNU_STACK      0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000000000 0x0000000000000000  RW     10
+  GNU_RELRO      0x0000000000000e10 0x0000000000600e10 0x0000000000600e10
+                 0x00000000000001f0 0x00000000000001f0  R      1
 
  Section to Segment mapping:
   Segment Sections...
    00
    01     .interp
-   02     .interp .note.ABI-tag .hash .dynsym .dynstr .gnu.version .gnu.version_r
-          .rel.dyn .rel.plt .init .plt .text .fini .rodata .eh_frame
-   03     .ctors .dtors .jcr .dynamic .got .got.plt .data .bss
+   02     .interp .note.ABI-tag .note.gnu.build-id .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt .init .plt .text .fini .rodata .eh_frame_hdr .eh_frame
+   03     .init_array .fini_array .jcr .dynamic .got .got.plt .data .bss
    04     .dynamic
-   05     .note.ABI-tag
-   06
+   05     .note.ABI-tag .note.gnu.build-id 
+   06     .eh_frame_hdr
+   07
+   08     .init_array .fini_array .jcr .dynamic .got
 ```
 
 可发现，`test` 和 `test.o`，`myprintf.o` 相比，多了很多节区，如 `.interp` 和 `.init` 等。另外，上表也给出了可执行文件的如下几个段（Segment）：
@@ -653,27 +677,8 @@ Program Headers:
 把可重定位文件链接成可执行文件：
 
 ```
-$ gcc -v -o test test.o myprintf.o
-Reading specs from /usr/lib/gcc/i486-slackware-linux/4.1.2/specs
-Target: i486-slackware-linux
-Configured with: ../gcc-4.1.2/configure --prefix=/usr --enable-shared
---enable-languages=ada,c,c++,fortran,java,objc --enable-threads=posix
---enable-__cxa_atexit --disable-checking --with-gnu-ld --verbose
---with-arch=i486 --target=i486-slackware-linux --host=i486-slackware-linux
-Thread model: posix
-gcc version 4.1.2
- /usr/libexec/gcc/i486-slackware-linux/4.1.2/collect2 --eh-frame-hdr -m
-elf_i386 -dynamic-linker /lib/ld-linux.so.2 -o test
-/usr/lib/gcc/i486-slackware-linux/4.1.2/../../../crt1.o
-/usr/lib/gcc/i486-slackware-linux/4.1.2/../../../crti.o
-/usr/lib/gcc/i486-slackware-linux/4.1.2/crtbegin.o
--L/usr/lib/gcc/i486-slackware-linux/4.1.2
--L/usr/lib/gcc/i486-slackware-linux/4.1.2
--L/usr/lib/gcc/i486-slackware-linux/4.1.2/../../../../i486-slackware-linux/lib
--L/usr/lib/gcc/i486-slackware-linux/4.1.2/../../.. test.o myprintf.o -lgcc
---as-needed -lgcc_s --no-as-needed -lc -lgcc --as-needed -lgcc_s --no-as-needed
-/usr/lib/gcc/i486-slackware-linux/4.1.2/crtend.o
-/usr/lib/gcc/i486-slackware-linux/4.1.2/../../../crtn.o
+$ gcc -v -o test test.o myprintf.o 2>&1 | tail -1
+ /usr/lib/gcc/x86_64-linux-gnu/4.8/collect2 --sysroot=/ --build-id --eh-frame-hdr -m elf_x86_64 --hash-style=gnu --as-needed -dynamic-linker /lib64/ld-linux-x86-64.so.2 -z relro -o test /usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu/crt1.o /usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/4.8/crtbegin.o -L/usr/lib/gcc/x86_64-linux-gnu/4.8 -L/usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/4.8/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/4.8/../../.. test.o myprintf.o -lgcc --as-needed -lgcc_s --no-as-needed -lc -lgcc --as-needed -lgcc_s --no-as-needed /usr/lib/gcc/x86_64-linux-gnu/4.8/crtend.o /usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu/crtn.o
 ```
 
 从上述演示看出，`gcc` 在链接了我们自己的目标文件 `test.o` 和 `myprintf.o` 之外，还链接了 `crt1.o`，`crtbegin.o` 等额外的目标文件，难道那些新的节区就来自这些文件？
@@ -685,14 +690,14 @@ elf_i386 -dynamic-linker /lib/ld-linux.so.2 -o test
 
 ```
 $ ld --eh-frame-hdr \
--m elf_i386 \
--dynamic-linker /lib/ld-linux.so.2 \
+-m elf_x86_64 \
+-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
 -o test \
-/usr/lib/crt1.o /usr/lib/crti.o /usr/lib/gcc/i486-slackware-linux/4.1.2/crtbegin.o \
-test.o myprintf.o \
--L/usr/lib/gcc/i486-slackware-linux/4.1.2 -L/usr/i486-slackware-linux/lib -L/usr/lib/ \
--lgcc --as-needed -lgcc_s --no-as-needed -lc -lgcc --as-needed -lgcc_s --no-as-needed \
-/usr/lib/gcc/i486-slackware-linux/4.1.2/crtend.o /usr/lib/crtn.o
+/usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu/crt1.o \
+/usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu/crti.o \
+/usr/lib/gcc/x86_64-linux-gnu/4.8/crtbegin.o \
+test.o myprintf.o -lc \
+/usr/lib/gcc/x86_64-linux-gnu/4.8/crtend.o /usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu/crtn.o
 $ ./test
 hello, world!
 ```
@@ -703,11 +708,11 @@ hello, world!
 
     要求创建一个 `.eh_frame_hdr` 节区(貌似目标文件test中并没有这个节区，所以不关心它)。
 
-- `-m elf_i386`
+- `-m elf_x86_64`
 
-    这里指定不同平台上的链接脚本，可以通过 `--verbose` 命令查看脚本的具体内容，如 `ld -m elf_i386 --verbose`，它实际上被存放在一个文件中（`/usr/lib/ldscripts` 目录下），我们可以去修改这个脚本，具体如何做？请参考 `ld` 的手册。在后面我们将简要提到链接脚本中是如何预定义变量的，以及这些预定义变量如何在我们的程序中使用。需要提到的是，如果不是交叉编译，那么无须指定该选项。
+    这里指定不同平台上的链接脚本，可以通过 `--verbose` 命令查看脚本的具体内容，如 `ld -m elf_x86_64 --verbose`，它实际上被存放在一个文件中（`/usr/lib/ldscripts` 目录下），我们可以去修改这个脚本，具体如何做？请参考 `ld` 的手册。在后面我们将简要提到链接脚本中是如何预定义变量的，以及这些预定义变量如何在我们的程序中使用。需要提到的是，如果不是交叉编译，那么无须指定该选项。
 
-- -dynamic-linker /lib/ld-linux.so.2
+- -dynamic-linker /lib64/ld-linux-x86-64.so.2
 
     指定动态装载器/链接器，即程序中的 `INTERP` 段中的内容。动态装载器/链接器负责链接有可共享库的可执行文件的装载和动态符号链接。
 
@@ -715,7 +720,7 @@ hello, world!
 
     指定输出文件，即可执行文件名的名字
 
-- /usr/lib/crt1.o /usr/lib/crti.o /usr/lib/gcc/i486-slackware-linux/4.1.2/crtbegin.o
+- /usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu/crt1.o ; /usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu/crti.o ; /usr/lib/gcc/x86_64-linux-gnu/4.8/crtbegin.o
 
     链接到 `test` 文件开头的一些内容，这里实际上就包含了 `.init` 等节区。`.init` 节区包含一些可执行代码，在 `main` 函数之前被调用，以便进行一些初始化操作，在 C++ 中完成构造函数功能。
 
@@ -723,12 +728,11 @@ hello, world!
 
     链接我们自己的可重定位文件
 
-- `-L/usr/lib/gcc/i486-slackware-linux/4.1.2 -L/usr/i486-slackware-linux/lib -L/usr/lib/ \
-  -lgcc --as-needed -lgcc_s --no-as-needed -lc -lgcc --as-needed -lgcc_s --no-as-needed`
+- `-lc`
 
-    链接 `libgcc` 库和 `libc` 库，后者定义有我们需要的 `puts` 函数
+    链接 `libc` 库，后者定义有我们需要的 `puts` 函数
 
-- /usr/lib/gcc/i486-slackware-linux/4.1.2/crtend.o /usr/lib/crtn.o
+- /usr/lib/gcc/x86_64-linux-gnu/4.8/crtend.o ; /usr/lib/gcc/x86_64-linux-gnu/4.8/../../../x86_64-linux-gnu/crtn.o
 
     链接到 `test` 文件末尾的一些内容，这里实际上包含了 `.fini` 等节区。`.fini` 节区包含了一些可执行代码，在程序退出时被执行，作一些清理工作，在 C++ 中完成析构造函数功能。我们往往可以通过 `atexit` 来注册那些需要在程序退出时才执行的函数。
 
@@ -738,32 +742,30 @@ hello, world!
 对于 `crtbegin.o` 和 `crtend.o` 这两个文件，貌似完全是用来支持 C++ 的构造和析构工作的，所以可以不链接到我们的可执行文件中，链接时把它们去掉看看，
 
 ```
-$ ld -m elf_i386 -dynamic-linker /lib/ld-linux.so.2 -o test \
-  /usr/lib/crt1.o /usr/lib/crti.o test.o myprintf.o \
-  -L/usr/lib -lc /usr/lib/crtn.o    #后面发现不用链接libgcc，也不用--eh-frame-hdr参数
+$ ld -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o test \
+  /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o \
+  test.o myprintf.o \
+  -lc /usr/lib/x86_64-linux-gnu/crtn.o    #后面发现不用链接libgcc，也不用--eh-frame-hdr参数
 $ readelf -l test
 
 Elf file type is EXEC (Executable file)
-Entry point 0x80482b0
-There are 7 program headers, starting at offset 52
+Entry point 0x4003c0
+There are 7 program headers, starting at offset 64
 
 Program Headers:
-  Type           Offset   VirtAddr   PhysAddr   FileSiz MemSiz  Flg Align
-  PHDR           0x000034 0x08048034 0x08048034 0x000e0 0x000e0 R E 0x4
-  INTERP         0x000114 0x08048114 0x08048114 0x00013 0x00013 R   0x1
-      [Requesting program interpreter: /lib/ld-linux.so.2]
-  LOAD           0x000000 0x08048000 0x08048000 0x003ea 0x003ea R E 0x1000
-  LOAD           0x0003ec 0x080493ec 0x080493ec 0x000e8 0x000e8 RW  0x1000
-  DYNAMIC        0x0003ec 0x080493ec 0x080493ec 0x000c8 0x000c8 RW  0x4
-  NOTE           0x000128 0x08048128 0x08048128 0x00020 0x00020 R   0x4
-  GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x00000 RW  0x4
-
+  Type           Offset             VirtAddr           PhysAddr
+                 FileSiz            MemSiz              Flags  Align
+  PHDR           0x0000000000000040 0x0000000000400040 0x0000000000400040
+                 0x0000000000000188 0x0000000000000188  R E    8
+  INTERP         0x00000000000001c8 0x00000000004001c8 0x00000000004001c8
+                 0x000000000000001c 0x000000000000001c  R      1
+      [Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]
+...
  Section to Segment mapping:
   Segment Sections...
    00
    01     .interp
-   02     .interp .note.ABI-tag .hash .dynsym .dynstr .gnu.version .gnu.version_r
-          .rel.dyn .rel.plt .init .plt .text .fini .rodata
+   02     .interp .note.ABI-tag .hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt .init .plt .text .fini .rodata .eh_frame
    03     .dynamic .got .got.plt .data
    04     .dynamic
    05     .note.ABI-tag
@@ -780,8 +782,8 @@ hello, world!
 而对于另外两个文件 `crti.o` 和 `crtn.o`，通过 `readelf -S` 查看后发现它们都有 `.init` 和 `.fini` 节区，如果我们不需要让程序进行一些初始化和清理工作呢？是不是就可以不链接这个两个文件？试试看。
 
 ```
-$ ld  -m elf_i386 -dynamic-linker /lib/ld-linux.so.2 -o test \
-      /usr/lib/crt1.o test.o myprintf.o -L/usr/lib/ -lc
+$ ld  -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o test \
+      /usr/lib/x86_64-linux-gnu/crt1.o test.o myprintf.o -L/usr/lib/ -lc
 /usr/lib/libc_nonshared.a(elf-init.oS): In function `__libc_csu_init':
 (.text+0x25): undefined reference to `_init'
 ```
@@ -790,17 +792,17 @@ $ ld  -m elf_i386 -dynamic-linker /lib/ld-linux.so.2 -o test \
 
 ```
 $ readelf -s /usr/lib/crt1.o | grep __libc_csu_init
-    18: 00000000     0 NOTYPE  GLOBAL DEFAULT  UND __libc_csu_init
+    11: 0000000000000000     0 NOTYPE  GLOBAL DEFAULT  UND __libc_csu_init
 $ readelf -s /usr/lib/crti.o | grep _init
-    17: 00000000     0 FUNC    GLOBAL DEFAULT    5 _init
+     9: 0000000000000000     0 FUNC    GLOBAL DEFAULT    4 _init
 ```
 
 竟然是 `crt1.o` 调用了 `__libc_csu_init` 函数，而该函数却引用了我们没有链接的 `crti.o` 文件中定义的 `_init` 符号。这样的话不链接 `crti.o` 和 `crtn.o` 文件就不成了罗？不对吧，要不干脆不用 `crt1.o` 算了，看看 `gcc` 额外链接进去的最后一个文件 `crt1.o` 到底干了个啥子？
 
 ```
-$ ld  -m elf_i386 -dynamic-linker /lib/ld-linux.so.2 -o \
-      test test.o myprintf.o -L/usr/lib/ -lc
-ld: warning: cannot find entry symbol _start; defaulting to 00000000080481a4
+$ ld -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 \
+     -o test test.o myprintf.o -lc
+ld: warning: cannot find entry symbol _start; defaulting to 0000000000400270
 ```
 
 这样却说没有找到入口符号 `_start`，难道 `crt1.o` 中定义了这个符号？不过它给默认设置了一个地址，只是个警告，说明 `test` 已经生成，不管怎样先运行看看再说。
@@ -808,7 +810,7 @@ ld: warning: cannot find entry symbol _start; defaulting to 00000000080481a4
 ```
 $ ./test
 hello, world!
-Segmentation fault
+Segmentation fault (core dumped)
 ```
 
 貌似程序运行完了，不过结束时冒出个段错误？可能是程序结束时有问题，用 `gdb` 调试看看：
@@ -817,36 +819,35 @@ Segmentation fault
 $ gcc -g -c test.c myprintf.c #产生目标代码, 非交叉编译，不指定-m也可链接，所以下面可去掉-m
 $ ld -dynamic-linker /lib/ld-linux.so.2 -o test \
      test.o myprintf.o -L/usr/lib -lc
-ld: warning: cannot find entry symbol _start; defaulting to 00000000080481d8
+ld: warning: cannot find entry symbol _start; defaulting to 0000000000400270
 $ ./test
 hello, world!
 Segmentation fault
 $ gdb -q ./test
-(gdb) l
+(gdb) list
 1       #include "test.h"
-2
-3       int main()
-4       {
-5               myprintf();
-6               return 0;
-7       }
-(gdb) break 7      #在程序的末尾设置一个断点
-Breakpoint 1 at 0x80481bf: file test.c, line 7.
+2       int main()
+3       {
+4               myprintf();
+5               return 0;
+6       }
+(gdb) break 6      #在程序的末尾设置一个断点
+Breakpoint 1 at 0x40027e: file test.c, line 6.
 (gdb) r            #程序都快结束了都没问题，怎么会到最后出个问题呢？
-Starting program: /mnt/hda8/Temp/c/program/test
+Starting program: /tmp/test
 hello, world!
 
-Breakpoint 1, main () at test.c:7
+Breakpoint 1, main () at test.c:6
 7       }
-(gdb) n        #单步执行看看，怎么下面一条指令是0x00000001，肯定是程序退出以后出了问题
+(gdb) n        #单步执行看看，怎么下面一条指令是0x0000000000000001，肯定是程序退出以后出了问题
 0x00000001 in ?? ()
-(gdb) n        #诶，当然找不到边了，都跑到0x00000001了
+(gdb) n        #诶，当然找不到边了，都跑到0x0000000000000001了
 Cannot find bounds of current function
 (gdb) c
 Continuing.
 
 Program received signal SIGSEGV, Segmentation fault.
-0x00000001 in ?? ()
+0x0000000000000001 in ?? ()
 ```
 
 原来是这么回事，估计是 `return 0` 返回之后出问题了，看看它的汇编去。
@@ -855,74 +856,69 @@ Program received signal SIGSEGV, Segmentation fault.
 $ gcc -S test.c #产生汇编代码
 $ cat test.s
 ...
-        call    myprintf
-        movl    $0, %eax
-        addl    $4, %esp
-        popl    %ecx
-        popl    %ebp
-        leal    -4(%ecx), %esp
-        ret
+	call	myprintf
+	movl	$0, %eax
+	popq	%rbp
+	.cfi_def_cfa 7, 8
+	ret
+	.cfi_endproc
 ...
 ```
 
 后面就这么几条指令，难不成 `ret` 返回有问题，不让它 `ret` 返回，把 `return` 改成 `_exit` 直接进入内核退出。
 
 ```
-$ vim test.c
-$ cat test.c    #就把return语句修改成_exit了。
+$ cp test.c test-exit.c vim test-exit.c
+$ cat test-exit.c    #就把return语句修改成_exit了。
 #include "test.h"
 #include <unistd.h> /* _exit */
-
 int main()
 {
 	myprintf();
 	_exit(0);
 }
-$ gcc -g -c test.c myprintf.c
-$ ld -dynamic-linker /lib/ld-linux.so.2 -o test test.o myprintf.o -L/usr/lib -lc
-ld: warning: cannot find entry symbol _start; defaulting to 00000000080481d8
-$ ./test    #竟然好了，再看看汇编有什么不同
+$ gcc -g -c test-exit.c myprintf.c
+$ ld -dynamic-linker /lib/ld-linux.so.2 -o test-exit test-exit.o myprintf.o -L/usr/lib -lc
+ld: warning: cannot find entry symbol _start; defaulting to 00000000004002c0
+$ ./test-exit    #竟然好了，再看看汇编有什么不同
 hello, world!
-$ gcc -S test.c
-$ cat test.s    #貌似就把ret指令替换成了_exit函数调用，直接进入内核，让内核处理了，那为什么ret有问题呢？
+$ gcc -S test-exit.c
+$ cat test-exit.s    #貌似就把ret指令替换成了_exit函数调用，直接进入内核，让内核处理了，那为什么ret有问题呢？
 ...
         call    myprintf
-        subl    $12, %esp
-        pushl   $0
+        movl    $0, %edi
         call    _exit
 ...
 $ gdb -q ./test    #把代码改回去（改成return 0;），再调试看看调用main函数返回时的下一条指令地址eip
-(gdb) l
+(gdb) list
 warning: Source file is more recent than executable.
 1       #include "test.h"
-2
-3       int main()
-4       {
-5               myprintf();
-6               return 0;
-7       }
-(gdb) break 5
-Breakpoint 1 at 0x80481b5: file test.c, line 5.
-(gdb) break 7
-Breakpoint 2 at 0x80481bc: file test.c, line 7.
+2       int main()
+3       {
+4               myprintf();
+5               return 0;
+6       }
+(gdb) break 4
+Breakpoint 1 at 0x400274: file test.c, line 4.
+(gdb) break 6
+Breakpoint 2 at 0x400279: file test.c, line 6.
 (gdb) r
 Starting program: /mnt/hda8/Temp/c/program/test
 
 Breakpoint 1, main () at test.c:5
 5               myprintf();
-(gdb) x/8x $esp
-0xbf929510:     0xbf92953c      0x080481a4      0x00000000      0xb7eea84f
-0xbf929520:     0xbf92953c      0xbf929534      0x00000000      0x00000001
+(gdb) x/4x $rsp
+0x7fffffffe588:	0x00000000	0x00000000	0x00000001	0x00000000
 ```
 
-发现 `0x00000001` 刚好是之前调试时看到的程序返回后的位置，即 `eip`，说明程序在初始化时，这个 `eip` 就是错误的。为什么呢？因为根本没有链接进初始化的代码，而是在编译器自己给我们，初始化了程序入口即 `00000000080481d8，也就是说，没有人调用 `main`，`main` 不知道返回哪里去，所以，我们直接让 `main` 结束时进入内核调用 `_exit` 而退出则不会有问题。
+发现 `0x00000001` 刚好是之前调试时看到的程序返回后的位置，即 `rip`，说明程序在初始化时，这个 `eip` 就是错误的。为什么呢？因为根本没有链接进初始化的代码，而是在编译器自己给我们，初始化了程序入口即 `0000000000400270`，也就是说，没有人调用 `main`，`main` 不知道返回哪里去，所以，我们直接让 `main` 结束时进入内核调用 `_exit` 而退出则不会有问题。
 
 通过上面的演示和解释发现只要把return语句修改为_exit语句，程序即使不链接任何额外的目标代码都可以正常运行（原因是不链接那些额外的文件时相当于没有进行初始化操作，如果在程序的最后执行ret汇编指令，程序将无法获得正确的eip，从而无法进行后续的动作）。但是为什么会有“找不到_start符号”的警告呢？通过`readelf -s`查看crt1.o发现里头有这个符号，并且crt1.o引用了main这个符号，是不是意味着会从`_start`进入main呢？是不是程序入口是`_start`，而并非main呢？
 
 <span id="toc_27212_14734_26"></span>
 ### C 语言程序真正的入口
 
-先来看看刚才提到的链接器的默认链接脚本（`ld -m elf_386 --verbose`），它告诉我们程序的入口（entry）是 `_start`，而一个可执行文件必须有一个入口地址才能运行，所以这就是说明了为什么 `ld` 一定要提示我们 “_start找不到”，找不到以后就给默认设置了一个地址。
+先来看看刚才提到的链接器的默认链接脚本（`ld -m elf_x86_64 --verbose`），它告诉我们程序的入口（entry）是 `_start`，而一个可执行文件必须有一个入口地址才能运行，所以这就是说明了为什么 `ld` 一定要提示我们 “_start找不到”，找不到以后就给默认设置了一个地址。
 
 ```
 $ ld --verbose  | grep ^ENTRY    #非交叉编译，可不用-m参数；ld默认找_start入口，并不是main哦！
@@ -956,7 +952,7 @@ $ gcc -c test.s myprintf.c
 重新链接，发现果然没问题了：
 
 ```
-$ ld -dynamic-linker /lib/ld-linux.so.2 -o test test.o myprintf.o -L/usr/lib/ -lc
+$ ld -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o test test.o myprintf.o -L/usr/lib/ -lc
 $ ./test
 hello, world!
 ```
@@ -972,7 +968,7 @@ hello, world!
 
 ```
 $ ld --verbose | grep PROVIDE | grep -v HIDDEN
-  PROVIDE (__executable_start = 0x08048000); . = 0x08048000 + SIZEOF_HEADERS;
+  PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x400000)); . = SEGMENT_START("text-segment", 0x400000) + SIZEOF_HEADERS;
   PROVIDE (__etext = .);
   PROVIDE (_etext = .);
   PROVIDE (etext = .);
@@ -984,8 +980,8 @@ $ ld --verbose | grep PROVIDE | grep -v HIDDEN
 
 ```
 /* predefinevalue.c */
-#include <stdio.h>
 
+#include <stdio.h>
 extern int __executable_start, etext, edata, end;
 
 int main(void)
