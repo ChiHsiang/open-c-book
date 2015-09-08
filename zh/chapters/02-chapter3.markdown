@@ -381,11 +381,10 @@ test is /bin/test
 ```
 $ cat < ./test.c
 #include <stdio.h>
-
 int main(void)
 {
-        printf("hi, myself!\n");
-        return 0;
+    printf("hi, myself!\n");
+    return 0;
 }
 ```
 
@@ -475,24 +474,22 @@ exec /usr/bin/test
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>     /* sleep, fork, _exit */
-
 int main()
 {
-	int child;
-	int status;
+    int child;
+    int status;
 
-	if( (child = fork()) == 0) {    /* child */
-		printf("child: my pid is %d\n", getpid());
-		printf("child: my parent's pid is %d\n", getppid());
-		execlp("/usr/bin/test","/usr/bin/test",(char *)NULL);;
-	} else if(child < 0){   	/* error */
-        	printf("create child process error!\n");
-        	_exit(0);
-	}                                               	/* parent */
-	printf("parent: my pid is %d\n", getpid());
-	if ( wait(&status) == child ) {
-		printf("parent: wait for my child exit successfully!\n");
-	}
+    if ((child = fork()) == 0) {    /* child */
+        printf("child: my pid is %d\n", getpid());
+        printf("child: my parent's pid is %d\n", getppid());
+        execlp("/usr/bin/test","/usr/bin/test",(char *)NULL);;
+    } else if (child < 0) {   	/* error */
+        printf("create child process error!\n");
+        _exit(0);
+    } /* parent */
+    printf("parent: my pid is %d\n", getpid());
+    if (wait(&status) == child)
+        printf("parent: wait for my child exit successfully!\n");
 }
 ```
 
