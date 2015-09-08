@@ -524,19 +524,25 @@ parent: wait for my child exit successfully!
 
 ```
 $ cat /proc/self/maps   #查看cat程序自身加载后对应进程的内存映像
-08048000-0804c000 r-xp 00000000 03:01 273716     /bin/cat
-0804c000-0804d000 rw-p 00003000 03:01 273716     /bin/cat
-0804d000-0806e000 rw-p 0804d000 00:00 0          [heap]
-b7c46000-b7e46000 r--p 00000000 03:01 87528      /usr/lib/locale/locale-archive
-b7e46000-b7e47000 rw-p b7e46000 00:00 0
-b7e47000-b7f83000 r-xp 00000000 03:01 466875     /lib/libc-2.5.so
-b7f83000-b7f84000 r--p 0013c000 03:01 466875     /lib/libc-2.5.so
-b7f84000-b7f86000 rw-p 0013d000 03:01 466875     /lib/libc-2.5.so
-b7f86000-b7f8a000 rw-p b7f86000 00:00 0
-b7fa1000-b7fbc000 r-xp 00000000 03:01 402817     /lib/ld-2.5.so
-b7fbc000-b7fbe000 rw-p 0001b000 03:01 402817     /lib/ld-2.5.so
-bfcdf000-bfcf4000 rw-p bfcdf000 00:00 0          [stack]
-ffffe000-fffff000 r-xp 00000000 00:00 0          [vdso]
+00400000-0040b000 r-xp 00000000 08:01 22563465                           /bin/cat
+0060a000-0060b000 r--p 0000a000 08:01 22563465                           /bin/cat
+0060b000-0060c000 rw-p 0000b000 08:01 22563465                           /bin/cat
+02122000-02143000 rw-p 00000000 00:00 0                                  [heap]
+7f8ea065e000-7f8ea0ad6000 r--p 00000000 08:01 28837140                   /usr/lib/locale/locale-archive
+7f8ea0ad6000-7f8ea0c91000 r-xp 00000000 08:01 25166311                   /lib/x86_64-linux-gnu/libc-2.19.so
+7f8ea0c91000-7f8ea0e90000 ---p 001bb000 08:01 25166311                   /lib/x86_64-linux-gnu/libc-2.19.so
+7f8ea0e90000-7f8ea0e94000 r--p 001ba000 08:01 25166311                   /lib/x86_64-linux-gnu/libc-2.19.so
+7f8ea0e94000-7f8ea0e96000 rw-p 001be000 08:01 25166311                   /lib/x86_64-linux-gnu/libc-2.19.so
+7f8ea0e96000-7f8ea0e9b000 rw-p 00000000 00:00 0 
+7f8ea0e9b000-7f8ea0ebe000 r-xp 00000000 08:01 25166306                   /lib/x86_64-linux-gnu/ld-2.19.so
+7f8ea109b000-7f8ea109e000 rw-p 00000000 00:00 0 
+7f8ea10bb000-7f8ea10bd000 rw-p 00000000 00:00 0 
+7f8ea10bd000-7f8ea10be000 r--p 00022000 08:01 25166306                   /lib/x86_64-linux-gnu/ld-2.19.so
+7f8ea10be000-7f8ea10bf000 rw-p 00023000 08:01 25166306                   /lib/x86_64-linux-gnu/ld-2.19.so
+7f8ea10bf000-7f8ea10c0000 rw-p 00000000 00:00 0 
+7ffe881e3000-7ffe88204000 rw-p 00000000 00:00 0                          [stack]
+7ffe8839b000-7ffe8839d000 r-xp 00000000 00:00 0                          [vdso]
+ffffffffff600000-ffffffffff601000 r-xp 00000000 00:00 0                  [vsyscall]
 ```
 
 关于程序加载和进程内存映像的更多细节请参考[《C 语言程序缓冲区注入分析》][100]。
