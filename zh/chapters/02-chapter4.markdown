@@ -41,16 +41,12 @@ Linux 支持动态链接库，不仅节省了磁盘、内存空间，而且[可�
 ```
 /* test.c */
 #include <stdio.h>    
-
 int global = 0;
-
 int main()
 {
-        char local = 'A';
-
-        printf("local = %c, global = %d\n", local, global);
-
-        return 0;
+    char local = 'A';
+    printf("local = %c, global = %d\n", local, global);
+    return 0;
 }
 ```
 
@@ -478,13 +474,11 @@ libmyprintf.so  libmyprintf.so.0  libmyprintf.so.0.0  myprintf.c  myprintf.h  my
 ```
 /* test.c */
 #include <stdio.h>   
-#include <myprintf.h>
-
+#include "myprintf.h"
 int main()
 {
-        myprintf("Hello World");
-
-        return 0;
+    myprintf("Hello World");
+    return 0;
 }
 ```
 
@@ -529,24 +523,24 @@ typedef int (*func)(char *);
 
 int main(void)
 {
-        void *h;
-        char *e;
-        func f;
+    void *h;
+    char *e;
+    func f;
 
-        h = dlopen(LIB_SO_NAME, RTLD_LAZY);
-        if ( !h ) {
-                printf("failed load libary: %s\n", LIB_SO_NAME);
-                exit(-1);
-        }
-        f = dlsym(h, FUNC_NAME);
-        e = dlerror();
-        if (e != NULL) {
-                printf("search %s error: %s\n", FUNC_NAME, LIB_SO_NAME);
-                exit(-1);
-        }
-        f("Hello World");
+    h = dlopen(LIB_SO_NAME, RTLD_LAZY);
+    if (!h) {
+        printf("failed load libary: %s\n", LIB_SO_NAME);
+        exit(-1);
+    }
+    f = dlsym(h, FUNC_NAME);
+    e = dlerror();
+    if (e != NULL) {
+        printf("search %s error: %s\n", FUNC_NAME, LIB_SO_NAME);
+        exit(-1);
+    }
+    f("Hello World");
 
-        exit(0);
+    exit(0);
 }
 ```
 
@@ -587,21 +581,21 @@ $ gcc -o test1 test1.c -ldl
 
 int main(int argc, char *argv[])
 {
-        long got2, got3;
-        long old_addr, new_addr;
+    long got2, got3;
+    long old_addr, new_addr;
 
-        got2=*(long *)(GOT+4);
-        got3=*(long *)(GOT+8);
-        old_addr=*(long *)(GOT+24);
+    got2 = *(long *)(GOT+4);
+    got3 = *(long *)(GOT+8);
+    old_addr = *(long *)(GOT+24);
 
-        printf("Hello World\n");
+    printf("Hello World\n");
 
-        new_addr=*(long *)(GOT+24);
+    new_addr = *(long *)(GOT+24);
 
-        printf("got2: 0x%0x, got3: 0x%0x, old_addr: 0x%0x, new_addr: 0x%0x\n",
-                                        got2, got3, old_addr, new_addr);
+    printf("got2: 0x%0x, got3: 0x%0x, old_addr: 0x%0x, new_addr: 0x%0x\n",
+           got2, got3, old_addr, new_addr);
 
-        return 0;
+    return 0;
 }
 ```
 
