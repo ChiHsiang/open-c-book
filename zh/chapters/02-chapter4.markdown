@@ -40,6 +40,7 @@ Linux 支持动态链接库，不仅节省了磁盘、内存空间，而且[可�
 
 ```
 /* test.c */
+
 #include <stdio.h>    
 int global = 0;
 int main()
@@ -57,7 +58,7 @@ int main()
 ```
 $ gcc -c test.c
 $ file test.o
-test.o: ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
+test.o: ELF 64-bit LSB  relocatable, x86-64, version 1 (SYSV), not stripped
 ```
 
 链接后才可以执行：
@@ -65,15 +66,16 @@ test.o: ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
 ```
 $ gcc -o test test.o
 $ file test
-test: ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), dynamically linked (uses shared libs), not stripped
+test: ELF 64-bit LSB  executable, x86-64, version 1 (SYSV), dynamically linked (uses shared libs), for GNU/Linux 2.6.24, BuildID[sha1]=f3b627300dd5b40b5f6bc9ec3ad05ff7871dc8e1, not stripped
 ```
 
 也可链接成动态链接库，不过一般不会把 `main` 函数链接成动态链接库，后面再介绍：
 
 ```
-$ gcc -fpic -shared -Wl,-soname,libtest.so.0 -o libtest.so.0.0 test.o
+$ gcc -fPIC -c test.c
+$ gcc -shared -Wl,-soname,libtest.so.0 -o libtest.so.0.0 test.o
 $ file libtest.so.0.0
-libtest.so.0.0: ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV), not stripped
+libtest.so.0.0: ELF 64-bit LSB  shared object, x86-64, version 1 (SYSV), dynamically linked, BuildID[sha1]=e7d3a06ee7b74b34e6e5fd52199e3e698af41c67, not stripped
 ```
 
 虽然 `ELF` 文件本身就支持三种不同的类型，不过它有一个统一的结构。这个结构是：
@@ -99,9 +101,9 @@ libtest.so.0.0: ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV), not
 
         $ gcc -c test.c
         $ nm test.o
-        00000000 B global
-        00000000 T main
-                 U printf
+        0000000000000000 B global
+        0000000000000000 T main
+                         U printf
 
     上面包含全局变量、自定义函数以及动态链接库中的函数，但不包含局部变量，而且发现这三个符号的地址都没有确定。
 
@@ -112,9 +114,9 @@ libtest.so.0.0: ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV), not
 
         $ gcc -o test test.o
         $ nm test | egrep "main$| printf|global$"
-        080495a0 B global
-        08048354 T main
-                 U printf@@GLIBC_2.0
+        0000000000601044 B global
+        000000000040052d T main
+                         U printf@@GLIBC_2.2.5
 
     经链接，`global` 和 `main` 的地址都已经确定了，但是 `printf` 却还没，因为它是动态链接库 `glibc` 中定义函数，需要动态链接，而不是这里的“静态”链接。
 
@@ -129,7 +131,7 @@ libtest.so.0.0: ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV), not
 
 ```
 $ nm -D /lib/`uname -m`-linux-gnu/libc.so.6 | grep "\ printf$"
-0000000000053840 T printf
+0000000000054400 T printf
 ```
 
 除了 `nm` 以外，还可以用 `readelf -s` 查看 `.dynsym` 表或者用 `objdump -tT` 查看。
@@ -156,7 +158,7 @@ Linux 下符号的动态链接默认采用[Lazy Mode方式][3]，也就是说在
 
 ```
 $ readelf -d test | grep NEEDED
- 0x00000001 (NEEDED)                     Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
 ```
 
 `ELF` 文件有一个特别的节区： `.dynamic`，它存放了和动态链接相关的很多信息，例如动态链接器通过它找到该文件使用的动态链接库。不过，该信息并未包含动态链接库 `libc.so.6` 的绝对路径，那动态链接器去哪里查找相应的库呢？
@@ -167,12 +169,12 @@ $ readelf -d test | grep NEEDED
 
 ```
 $ ldd test
-        linux-gate.so.1 =>  (0xffffe000)
-        libc.so.6 => /lib/libc.so.6 (0xb7da2000)
-        /lib/ld-linux.so.2 (0xb7efc000)
+	linux-vdso.so.1 =>  (0x00007ffceabbd000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007fc2b6908000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007fc2b6ccd000)
 ```
 
-`libc.so.6` 通过 `readelf -d` 就可以看到的，是直接依赖的库；而 `linux-gate.so.1` 在文件系统中并没有对应的库文件，它是一个虚拟的动态链接库，对应进程内存映像的内核部分，更多细节请参考资料[\[11\]][11]; 而 `/lib/ld-linux.so.2` 正好是动态链接器，系统需要用它来进行符号重定位。那 `ldd` 是怎么知道 `/lib/ld-linux.so` 就是该文件的动态链接器呢？
+`libc.so.6` 通过 `readelf -d` 就可以看到的，是直接依赖的库；而 `linux-gate.so.1` 在文件系统中并没有对应的库文件，它是一个虚拟的动态链接库，对应进程内存映像的内核部分，更多细节请参考资料[\[11\]][11]; 而 `/lib64/ld-linux-x86-64.so.2` 正好是动态链接器，系统需要用它来进行符号重定位。那 `ldd` 是怎么知道 `/lib64/ld-linux-x86-64.so.2` 就是该文件的动态链接器呢？
 
 那是因为 `ELF` 文件通过专门的节区指定了动态链接器，这个节区就是 `.interp` 。
 
@@ -180,20 +182,20 @@ $ ldd test
 $ readelf -x .interp test
 
 Hex dump of section '.interp':
-  0x08048114 2f6c6962 2f6c642d 6c696e75 782e736f /lib/ld-linux.so
-  0x08048124 2e3200                              .2.
+  0x00400238 2f6c6962 36342f6c 642d6c69 6e75782d /lib64/ld-linux-
+  0x00400248 7838362d 36342e73 6f2e3200          x86-64.so.2.
 ```
 
-可以看到这个节区刚好有字符串 `/lib/ld-linux.so.2`，即 `ld-linux.so` 的绝对路径。
+可以看到这个节区刚好有字符串 `/lib64/ld-linux-x86-64.so.2`，即 `ld-linux-x86-64.so` 的绝对路径。
 
-我们发现，与 `libc.so` 不同的是，`ld-linux.so` 的路径是绝对路径，而 `libc.so` 仅仅包含了文件名。原因是：程序被执行时，`ld-linux.so` 将最先被装载到内存中，没有其他程序知道去哪里查找 `ld-linux.so`，所以它的路径必须是绝对的；当 `ld-linux.so` 被装载以后，由它来去装载可执行文件和相关的共享库，它将根据 `PATH` 变量和 `LD_LIBRARY_PATH` 变量去磁盘上查找它们，因此可执行文件和共享库都可以不指定绝对路径。
+我们发现，与 `libc.so` 不同的是，`ld-linux-x86-64.so` 的路径是绝对路径，而 `libc.so` 仅仅包含了文件名。原因是：程序被执行时，`ld-linux-x86-64.so` 将最先被装载到内存中，没有其他程序知道去哪里查找 `ld-linux-x86-64.so`，所以它的路径必须是绝对的；当 `ld-linux-x86-64.so` 被装载以后，由它来去装载可执行文件和相关的共享库，它将根据 `PATH` 变量和 `LD_LIBRARY_PATH` 变量去磁盘上查找它们，因此可执行文件和共享库都可以不指定绝对路径。
 
 下面着重介绍动态链接器本身。
 
 <span id="toc_23258_14315_8"></span>
 ### 动态链接器（dynamic linker/loader）
 
-Linux 下 `elf` 文件的动态链接器是 `ld-linux.so`，即 `/lib/ld-linux.so.2` 。从名字来看和静态链接器 `ld` （`gcc` 默认使用的链接器，见参考资料[\[10\]][10]）类似。通过 `man ld-linux` 可以获取与动态链接器相关的资料，包括各种相关的环境变量和文件都有详细的说明。
+Linux 下 `elf` 文件的动态链接器是 `ld-linux.so`，即 `/lib64/ld-linux-x86-64.so.2` 。从名字来看和静态链接器 `ld` （`gcc` 默认使用的链接器，见参考资料[\[10\]][10]）类似。通过 `man ld-linux` 可以获取与动态链接器相关的资料，包括各种相关的环境变量和文件都有详细的说明。
 
 对于环境变量，除了上面提到过的 `LD_LIBRARY_PATH` 和 `LD_BIND_NOW` 变量外，还有其他几个重要参数，比如 `LD_PRELOAD` 用于指定预装载一些库，以便替换其他库中的函数，从而做一些安全方面的处理 [\[6\]][6]，[\[9\]][9]，[\[12\]][12]，而环境变量 `LD_DEBUG` 可以用来进行动态链接的相关调试。
 
@@ -213,7 +215,7 @@ Linux 下 `elf` 文件的动态链接器是 `ld-linux.so`，即 `/lib/ld-linux.s
 
 ```
 $ readelf -h test | grep Entry
-  Entry point address:               0x80482b0
+  Entry point address:               0x400440
 ```
 
 对于第 2 步，上一节提到的 `.dynamic` 节区指定了可执行文件依赖的库名，`ld-linux` （在这里叫做动态装载器或程序解释器比较合适）再从 `LD_LIBRARY_PATH` 指定的路径中找到相关的库文件或者直接从 `/etc/ld.so.cache` 库缓冲中加载相关库到内存中。（关于进程的内存映像，推荐参考资料 [\[14\]][14]）
@@ -235,47 +237,51 @@ $ readelf -h test | grep Entry
 
 ```
 $ objdump -d -s -j .text test | grep printf
- 804837c:       e8 1f ff ff ff          call   80482a0 <printf@plt>
+  40054f:	e8 bc fe ff ff       	callq  400410 <printf@plt>
 ```
 
-发现，该地址指向了 `plt` （即过程链接表）即地址 `80482a0` 处。下面查看该地址处的内容。
+发现，该地址指向了 `plt` （即过程链接表）即地址 `400410` 处。下面查看该地址处的内容。
 
 ```
-$ objdump -D test | grep "80482a0" | grep -v call
-080482a0 <printf@plt>:
- 80482a0:       ff 25 8c 95 04 08       jmp    *0x804958c
+$ objdump -D test | grep "400410" | grep -v call
+0000000000400410 <printf@plt>:
+  400410:	ff 25 02 0c 20 00    	jmpq   *0x200c02(%rip)        # 601018 <_GLOBAL_OFFSET_TABLE_+0x18>
 ```
 
-发现 `80482a0` 地址对应的是一条跳转指令，跳转到 `0x804958c` 地址指向的地址。到底 `0x804958c` 地址本身在什么地方呢？我们能否从 `.dynamic` 节区（该节区存放了和动态链接相关的数据）获取相关的信息呢？
+发现 `400410` 地址对应的是一条跳转指令，跳转到 `0x200c02` 地址指向的地址 (601018)。到底 `0x601018` 地址本身在什么地方呢？我们能否从 `.dynamic` 节区（该节区存放了和动态链接相关的数据）获取相关的信息呢？
 
 ```
 $ readelf -d test
 
-Dynamic section at offset 0x4ac contains 20 entries:
+Dynamic section at offset 0xe28 contains 24 entries:
   Tag        Type                         Name/Value
- 0x00000001 (NEEDED)                     Shared library: [libc.so.6]
- 0x0000000c (INIT)                       0x8048258
- 0x0000000d (FINI)                       0x8048454
- 0x00000004 (HASH)                       0x8048148
- 0x00000005 (STRTAB)                     0x80481c0
- 0x00000006 (SYMTAB)                     0x8048170
- 0x0000000a (STRSZ)                      76 (bytes)
- 0x0000000b (SYMENT)                     16 (bytes)
- 0x00000015 (DEBUG)                      0x0
- 0x00000003 (PLTGOT)                     0x8049578
- 0x00000002 (PLTRELSZ)                   24 (bytes)
- 0x00000014 (PLTREL)                     REL
- 0x00000017 (JMPREL)                     0x8048240
- 0x00000011 (REL)                        0x8048238
- 0x00000012 (RELSZ)                      8 (bytes)
- 0x00000013 (RELENT)                     8 (bytes)
- 0x6ffffffe (VERNEED)                    0x8048218
- 0x6fffffff (VERNEEDNUM)                 1
- 0x6ffffff0 (VERSYM)                     0x804820c
- 0x00000000 (NULL)                       0x0
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000000c (INIT)               0x4003e0
+ 0x000000000000000d (FINI)               0x4005d4
+ 0x0000000000000019 (INIT_ARRAY)         0x600e10
+ 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)
+ 0x000000000000001a (FINI_ARRAY)         0x600e18
+ 0x000000000000001c (FINI_ARRAYSZ)       8 (bytes)
+ 0x000000006ffffef5 (GNU_HASH)           0x400298
+ 0x0000000000000005 (STRTAB)             0x400318
+ 0x0000000000000006 (SYMTAB)             0x4002b8
+ 0x000000000000000a (STRSZ)              63 (bytes)
+ 0x000000000000000b (SYMENT)             24 (bytes)
+ 0x0000000000000015 (DEBUG)              0x0
+ 0x0000000000000003 (PLTGOT)             0x601000
+ 0x0000000000000002 (PLTRELSZ)           72 (bytes)
+ 0x0000000000000014 (PLTREL)             RELA
+ 0x0000000000000017 (JMPREL)             0x400398
+ 0x0000000000000007 (RELA)               0x400380
+ 0x0000000000000008 (RELASZ)             24 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffe (VERNEED)            0x400360
+ 0x000000006fffffff (VERNEEDNUM)         1
+ 0x000000006ffffff0 (VERSYM)             0x400358
+ 0x0000000000000000 (NULL)               0x0
 ```
 
-发现 `0x8049578` 地址和 `0x804958c` 地址比较近，通过资料 [\[8\]][8] 查到前者正好是 `.got.plt` （即过程链接表）对应的全局偏移表的入口地址。难道 `0x804958c` 正好位于 `.got.plt` 节区中？
+发现 `0x601000` 地址和 `0x601018` 地址比较近，通过资料 [\[8\]][8] 查到前者正好是 `.got.plt` （即过程链接表）对应的全局偏移表的入口地址。难道 `0x601018` 正好位于 `.got.plt` 节区中？
 
 <span id="toc_23258_14315_10"></span>
 ### 全局偏移表（got）
@@ -286,42 +292,44 @@ Dynamic section at offset 0x4ac contains 20 entries:
 $ readelf -x .got.plt test
 
 Hex dump of section '.got.plt':
-  0x08049578 ac940408 00000000 00000000 86820408 ................
-  0x08049588 96820408 a6820408                   ........
+  0x00601000 280e6000 00000000 00000000 00000000 (.`.............
+  0x00601010 00000000 00000000 16044000 00000000 ..........@.....
+  0x00601020 26044000 00000000 36044000 00000000 &.@.....6.@.....
 ```
 
-从上述结果可以看出 `0x804958c` 地址（即 `0x08049588+4`）处存放的是 `a6820408`，考虑到我的实验平台是 `i386`，字节顺序是 `little-endian ` 的，所以实际数值应该是 `080482a6`，也就是说 `*` （`0x804958c`）`的值是 `080482a6`，这个地址刚好是过程链接表的最后一项 `call 80482a0<printf@plt>` 中 `80482a0` 地址往后偏移 `6 ` 个字节，容易猜到该地址应该就是 `jmp` 指令的后一条地址。
+从上述结果可以看出 `0x601018` 地址（即 `0x601000+18`）处存放的是 `a6820408`，考虑到我的实验平台是 `x86_64`，字节顺序是 `little-endian ` 的，所以实际数值应该是 `080482a6`，也就是说 `*` （`0x804958c`）`的值是 `080482a6`，这个地址刚好是过程链接表的最后一项 `call 80482a0<printf@plt>` 中 `80482a0` 地址往后偏移 `6 ` 个字节，容易猜到该地址应该就是 `jmp` 指令的后一条地址。
 
 ```
-$ objdump -d -d -s -j .plt test |  grep "080482a0 <printf@plt>:" -A 3
-080482a0 <printf@plt>:
- 80482a0:       ff 25 8c 95 04 08       jmp    *0x804958c
- 80482a6:       68 10 00 00 00          push   $0x10
- 80482ab:       e9 c0 ff ff ff          jmp    8048270 <_init+0x18>
+$ objdump -d -d -s -j .plt test |  grep "<printf@plt>:" -A 3
+0000000000400410 <printf@plt>:
+  400410:	ff 25 02 0c 20 00    	jmpq   *0x200c02(%rip)        # 601018 <_GLOBAL_OFFSET_TABLE_+0x18>
+  400416:	68 00 00 00 00       	pushq  $0x0
+  40041b:	e9 e0 ff ff ff       	jmpq   400400 <_init+0x20>
 ```
 
-`80482a6` 地址恰巧是一条 `push` 指令，随后是一条 `jmp` 指令（暂且不管 `push` 指令入栈的内容有什么意义），执行完 `push` 指令之后，就会跳转到 `8048270 ` 地址处，下面看看 `8048270 ` 地址处到底有哪些指令。
+`0x400416` 地址恰巧是一条 `pushq` 指令，随后是一条 `jmpq` 指令（暂且不管 `pushq` 指令入栈的内容有什么意义），执行完 `pushq` 指令之后，就会跳转到 `0x400400` 地址处，下面看看 `8048270 ` 地址处到底有哪些指令。
 
 ```
-$ objdump -d -d -s -j .plt test | grep -v "jmp    8048270 <_init+0x18>" | grep "08048270" -A 2
-08048270 <__gmon_start__@plt-0x10>:
- 8048270:       ff 35 7c 95 04 08       pushl  0x804957c
- 8048276:       ff 25 80 95 04 08       jmp    *0x8049580
+$ objdump -d -d -s -j .plt test | grep -v "400400 <_init+0x20>" | grep "0400400" -A 2
+0000000000400400 <printf@plt-0x10>:
+  400400:	ff 35 02 0c 20 00    	pushq  0x200c02(%rip)        # 601008 <_GLOBAL_OFFSET_TABLE_+0x8>
+  400406:	ff 25 04 0c 20 00    	jmpq   *0x200c04(%rip)        # 601010 <_GLOBAL_OFFSET_TABLE_+0x10>
 ```
 
-同样是一条入栈指令跟着一条跳转指令。不过这两个地址 `0x804957c` 和 `0x8049580` 是连续的，而且都很熟悉，刚好都在 `.got.plt` 表里头（从上面我们已经知道 `.got.plt` 的入口是 `0x08049578`）。这样的话，我们得确认这两个地址到底有什么内容。
+同样是一条入栈指令跟着一条跳转指令。不过这两个地址 `0x601008` 和 `0x601010` 是连续的，而且都很熟悉，刚好都在 `.got.plt` 表里头（从上面我们已经知道 `.got.plt` 的入口是 `0x601000`）。这样的话，我们得确认这两个地址到底有什么内容。
 
 ```
 $ readelf -x .got.plt test
 
 Hex dump of section '.got.plt':
-  0x08049578 ac940408 00000000 00000000 86820408 ................
-  0x08049588 96820408 a6820408                   ........
+  0x00601000 280e6000 00000000 00000000 00000000 (.`.............
+  0x00601010 00000000 00000000 16044000 00000000 ..........@.....
+  0x00601020 26044000 00000000 36044000 00000000 &.@.....6.@.....
 ```
 
 不过，遗憾的是通过 `readelf` 查看到的这两个地址信息都是 0，它们到底是什么呢？
 
-现在只能求助参考资料 [\[8\]][8]，该资料的“3.8.5 过程链接表”部分在介绍过程链接表和全局偏移表相互合作解析符号的过程中的三步涉及到了这两个地址和前面没有说明的 `push ` $ `0x10` 指令。
+现在只能求助参考资料 [\[8\]][8]，该资料的“3.8.5 过程链接表”部分在介绍过程链接表和全局偏移表相互合作解析符号的过程中的三步涉及到了这两个地址和前面没有说明的 `pushq $0x0` 指令。
 
 - 在程序第一次创建内存映像时，动态链接器为全局偏移表的第二（`0x804957c`）和第三项（`0x8049580`）设置特殊值。
 - 原步骤 5。在跳转到 `08048270 <__gmon_start__@plt-0x10>`，即过程链接表的第一项之前，有一条压入栈指令，即`push $0x10`，0x10是相对于重定位表起始地址的一个偏移地址，这个偏移地址到底有什么用呢？它应该是提供给动态链接器的什么信息吧？后面再说明。
